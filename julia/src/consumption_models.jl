@@ -80,8 +80,13 @@ Log consumption growth g_c is given by
 
     h_c' = ρ_hc h_c + σ_hc w'
 
-Here {e}, {u} and {w} are IID and N(0, 1).  
+Here {η}, {e}, {u} and {w} are IID and N(0, 1).
 
+Additionally, log time preference growth z_λ is given by
+
+    z_λ' = ρ_λ z_λ + σ_λ ε'
+
+{ε} is IID and N(0, 1)
 
 =#
 
@@ -102,23 +107,26 @@ struct SSYConsumption{T <: Real}  <: ConsumptionProcess
     σ_hz::T
     ρ_hc::T 
     σ_hc::T 
+    ρ_λ::T
+    σ_λ::T
 end
 
 
 """
-Default consumption process values from May 2017 version of Schorfheide, Song
-and Yaron.  See p. 28.
+Default consumption process values from October 2017 version of Schorfheide, Song and Yaron.  See p. 29.
 
 """
 function SSYConsumption(;μ_c=0.0016,
                          ρ=0.987,
                          ϕ_z=0.215,
-                         σ_bar=0.0032,
+                         σ_bar=0.0035,
                          ϕ_c=1.0,
                          ρ_hz=0.992,
                          σ_hz=sqrt(0.0039),
                          ρ_hc=0.991,
-                         σ_hc=sqrt(0.0096))  
+                         σ_hc=sqrt(0.0096),
+                         ρ_λ=0.959,
+                         σ_λ=sqrt(0.0004))
                        
     return SSYConsumption(μ_c,
                           ρ,
@@ -128,7 +136,9 @@ function SSYConsumption(;μ_c=0.0016,
                           ρ_hz,
                           σ_hz,
                           ρ_hc,
-                          σ_hc)
+                          σ_hc,
+                          ρ_λ,
+                          σ_λ)
 end
 
 
@@ -188,12 +198,13 @@ Simulate the state process and consumption for the SSY model.
 
 Returns
 
-    * X[1], ..., X[ts_length]
     * gc[2], ..., gc[ts_length]
+    * z_λ[2], ..., z_λ[ts_length]
 
 where
 
     gc[t] = ln(C[t]) - ln(C[t-1])
+    z_λ[t] = ln(λ[t]) - ln(λ[t-1])
 
 
 """
@@ -204,6 +215,7 @@ function simulate(cp::SSYConsumption; ts_length=1000000, seed=1234)
     # Unpack
     μ_c, ρ, ϕ_z, σ_bar, ϕ_c = cp.μ_c, cp.ρ, cp.ϕ_z, cp.σ_bar, cp.ϕ_c
     ρ_hz, σ_hz, ρ_hc, σ_hc = cp.ρ_hz, cp.σ_hz, cp.ρ_hc, cp.σ_hc
+    ρ_λ, σ_λ = cp.ρ_λ, cp.σ_λ
 
     # Map h to σ
     tz(h_z) = ϕ_z * σ_bar * exp(h_z)
@@ -215,6 +227,7 @@ function simulate(cp::SSYConsumption; ts_length=1000000, seed=1234)
 
     # Allocate memory consumption 
     c_growth = zeros(ts_length)
+    λ_growth = zeros(ts_length)
 
     # Simulate all stochastic processes 
     for t in 1:(ts_length-1)
@@ -223,6 +236,7 @@ function simulate(cp::SSYConsumption; ts_length=1000000, seed=1234)
         
         # Evaluate consumption and dividends
         c_growth[t+1] = μ_c + z + σ_c * randn()
+        λ_growth[t+1] = ρ_λ * λ_growth[t] + σ_λ * randn()
 
         # Update states
         z = ρ * z + sqrt(1 - ρ^2) * σ_z * randn()
@@ -230,7 +244,7 @@ function simulate(cp::SSYConsumption; ts_length=1000000, seed=1234)
         h_c = ρ_hc * h_c + σ_hc * randn()
     end
 
-    return c_growth[2:end]
+    return (c_growth[2:end], λ_growth[2:end])
 end
 
 
